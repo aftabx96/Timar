@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+/*
+  Timar design tokens.
+  Forest palette: mangrove canopy greens on a pale lichen paper, with estuary teal for water.
+  Silt and rust are the only warm tones, kept for mud flats and cutting alerts.
+*/
+@theme {
+  --font-display: "Young Serif", Georgia, serif;
+  --font-sans: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-paper: #f2f2ea;
+  --color-paper-2: #e6e9dc;
+  --color-paper-3: #d8ddca;
+  --color-ink: #13291d;
+  --color-ink-2: #234232;
+  --color-ink-3: #4b6b57;
+  --color-muted: #5a6a5f;
+  --color-line: #cbd2bd;
+  --color-leaf: #3f7a34;
+  --color-leaf-2: #74a554;
+  --color-leaf-pale: #dce9cd;
+  --color-tide: #2d6b6b;
+  --color-tide-pale: #d2e4df;
+  --color-silt: #a3865a;
+  --color-rust: #b0512a;
+  --color-rust-pale: #f2ded2;
+
+  --ease-tide: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  ::selection {
+    background: var(--color-leaf-pale);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-tide);
+    outline-offset: 3px;
+  }
+}
+
+@layer components {
+  .container-x {
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    .container-x {
+      padding-inline: 2rem;
+    }
+  }
+
+  /* Small uppercase label used for section numbers and table heads */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  /* Ruled paper look used on survey style panels */
+  .ruled {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      color-mix(in srgb, var(--color-line) 70%, transparent) 31px,
+      color-mix(in srgb, var(--color-line) 70%, transparent) 32px
+    );
+  }
+
+  /* Underline that grows from the left on hover */
+  .link-grow {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1.5px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size 0.35s var(--ease-tide);
+  }
+  .link-grow:hover {
+    background-size: 100% 1.5px;
+  }
+}
+
+/* ---------- satellite map (SitesMap.jsx) ---------- */
+
+.sites-map {
+  background: var(--color-ink);
+  font-family: var(--font-sans);
+}
+.sites-map .leaflet-control-attribution {
+  background: var(--color-ink);
+  color: color-mix(in srgb, var(--color-paper) 75%, transparent);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-top-left-radius: 8px;
+}
+.sites-map .leaflet-control-attribution a {
+  color: var(--color-paper);
+}
+.sites-map .leaflet-bar {
+  border: 0;
+  box-shadow: none;
+}
+.sites-map .leaflet-bar a {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  border-bottom-color: var(--color-line);
+}
+
+.site-pin {
+  position: absolute;
+  transform: translate(-7px, -7px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.site-pin__dot {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--color-paper);
+  border: 3px solid var(--color-ink);
+}
+.site-pin--active .site-pin__dot {
+  background: var(--color-leaf-2);
+}
+.site-pin--active .site-pin__dot::after {
+  /* a ring that widens like a ripple on water, for the site being planted now */
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 2px solid var(--color-leaf-2);
+  animation: site-ripple 2.2s var(--ease-tide) infinite;
+}
+.site-pin__label {
+  font: 500 12px/1 var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-paper);
+  padding: 5px 8px;
+  border-radius: 999px;
+  transition: transform 0.3s var(--ease-tide);
+}
+.site-pin.is-selected .site-pin__label {
+  background: var(--color-ink);
+  color: var(--color-paper);
+  transform: translateX(2px);
+}
+@keyframes site-ripple {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.site-detail {
+  animation: detail-wipe 0.5s var(--ease-tide);
+}
+@keyframes detail-wipe {
+  from {
+    clip-path: inset(0 0 100% 0 round 16px);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

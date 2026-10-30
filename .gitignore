@@ -1,0 +1,24 @@
+# dependencies and builds
+node_modules/
+dist/
+dist-ssr/
+
+# secrets: only the example file is shared
+.env
+.env.*
+!.env.example
+
+# local data the backend creates
+backend/.data/
+backend/uploads/
+
+# logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# local editor and tool settings
+.claude/
