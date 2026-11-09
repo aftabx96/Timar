@@ -54,7 +54,7 @@ export async function consumeCode(q, userId, purpose, code) {
 async function checkCode(q, userId, purpose, code) {
   const { rows } = await q(
     `SELECT id, code_hash, attempts, expires_at < now() AS expired FROM otp_codes
-     WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL
+     WHERE user_id = $1 AND purpose = $2 AND NOT used
      ORDER BY created_at DESC LIMIT 1`,
     [userId, purpose],
   )
@@ -72,5 +72,5 @@ async function checkCode(q, userId, purpose, code) {
       field: 'code',
     })
   }
-  await q('UPDATE otp_codes SET consumed_at = now() WHERE id = $1', [row.id])
+  await q('UPDATE otp_codes SET used = true WHERE id = $1', [row.id])
 }

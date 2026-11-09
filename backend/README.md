@@ -14,12 +14,12 @@ so the browser sees one origin and the session cookie stays first party.
 
 ## Database
 
-The SQL is written for PostgreSQL (`src/db/migrations`).
+All tables are in one file, [`src/db/schema.sql`](src/db/schema.sql). It runs on every start and only creates tables that do not exist yet.
 
 - `DATABASE_URL` empty: runs on [PGlite](https://pglite.dev), the Postgres engine compiled to WASM, stored in `backend/.data`. Nothing to install. Delete that folder to start fresh.
 - `DATABASE_URL=postgres://...`: uses a real PostgreSQL server through `pg`. Use this for deployment and once PostGIS is needed for plots.
 
-Tables: `users`, `profiles`, `volunteer_applications`, `otp_codes`, `sessions`, `audit_log`, `drives`, `articles`. The 3 October 2026 drive and four starter articles are added by `src/db/seedContent.js` when those tables are empty.
+Tables: `users` (with the profile answers), `otp_codes`, `volunteer_applications`, `drives`, `articles`, `adoptions`. The 3 October 2026 drive and four starter articles are added by `src/db/seedContent.js` when those tables are empty.
 
 ## Email
 
@@ -40,9 +40,9 @@ All under `/api`. Errors look like `{ "error": { "message", "code", "field" } }`
 | POST | `/auth/login/password` | email, password | Signs in. 403 `unverified` sends a fresh verify code |
 | POST | `/auth/resend` | email, purpose (`verify`, `login`, `reset`) | 30 second cooldown |
 | POST | `/auth/password/forgot` | email | Emails a reset code |
-| POST | `/auth/password/reset` | email, code, password | Sets the password, signs out other devices |
+| POST | `/auth/password/reset` | email, code, password | Sets the password and signs in |
 | GET | `/auth/me` | | Current user |
-| POST | `/auth/logout` | | Revokes the session |
+| POST | `/auth/logout` | | Clears the session cookie |
 | PUT | `/me/profile` | role, bio, photo, notify, details | Profile setup. See `src/routes/profile.js` for details per role |
 | GET | `/drives`, `/drives/:id` | | Published past drives (public) |
 | GET | `/articles?kind=`, `/articles/:slug` | | Published articles; kind is `article` or `awareness` (public) |
@@ -50,17 +50,24 @@ All under `/api`. Errors look like `{ "error": { "message", "code", "field" } }`
 | PUT, DELETE | `/admin/drives/:id` | same as POST | Edit or delete a drive |
 | GET, POST | `/admin/articles` | title, slug, kind, summary, body, cover, published | Slug is made from the title when empty and kept unique |
 | PUT, DELETE | `/admin/articles/:id` | same as POST | Edit or delete an article |
+| GET | `/me/adoptions` | | The signed in user's adoptions, newest first |
+| GET | `/admin/overview` | | Counts and per month figures for the admin overview |
+| GET | `/admin/volunteer-applications` | | Pending volunteer requests |
+| POST | `/admin/volunteer-applications/:id/approve`, `/decline` | | Approving makes a visitor a volunteer |
+| GET | `/admin/adoptions` | | Every adoption with who made it |
+| POST | `/admin/adoptions/:id/paid` | | Marks a pending adoption as paid |
+| PUT | `/admin/adoptions/:id/plot` | plot (like `KD-014`) | Paid adoptions only |
+| GET | `/admin/users` | | Every account |
+| PUT | `/admin/users/:id/role` | role | Admin only, not your own account |
 | POST | `/uploads` | data (image data URL) | Admin and coordinator; JPG, PNG or WebP under 2 MB, checked by its bytes; served at `/uploads/...` |
 
 ## How the rules from the SRS are met
 
 - Passwords: bcrypt, 12 rounds. At least 8 characters with letters and numbers.
 - New accounts are `visitor`. Choosing volunteer files a `volunteer_applications` row; the role changes on approval.
-- Session: signed JWT (12 hours) in an httpOnly cookie, tied to a `sessions` row (30 days). An expired token is
-  refreshed automatically while its session is alive. Logout and password reset revoke sessions.
+- Session: signed JWT in an httpOnly cookie, valid for 7 days. Logout clears the cookie.
 - Codes: 6 digits, stored as an HMAC, 5 minutes, 5 tries, one active code per purpose.
 - Failed sign in: one message for unknown email and wrong password; 5 failures from one address lock it for 30 seconds.
-- Every account event goes to `audit_log`.
 
 ## Demo accounts
 

@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/index.js'
-import { audit } from '../lib/audit.js'
 import { handle } from '../lib/errors.js'
 import { loadUser } from '../lib/users.js'
 import { requireAuth } from '../middleware/auth.js'
@@ -62,7 +61,7 @@ const body = z.discriminatedUnion('role', [
 
 /*
   Saves the profile setup answers.
-  - visitor: stays a visitor (sponsoring and booking need no approval).
+  - visitor: stays a visitor (adopting and booking need no approval).
   - volunteer: stays a visitor and files a volunteer application. The role changes on approval (VLM).
   - company: becomes a company account.
   Staff roles (coordinator, admin) keep their role whatever is chosen here.
@@ -72,53 +71,77 @@ router.put(
   requireAuth,
   handle(async (req, res) => {
     const input = body.parse(req.body)
+    const d = input.details
     const db = await getDb()
     const staff = ['coordinator', 'admin'].includes(req.user.role)
 
-    const user = await db.tx(async (q) => {
-      const { emergency, ...details } = input.details
+    let role = req.user.role
+    if (!staff) {
+      if (input.role === 'company') role = 'company'
+      else if (req.user.role !== 'volunteer') role = 'visitor'
+    }
+    const notify = { ...req.user.profile.notify, ...input.notify }
 
+    const user = await db.tx(async (q) => {
       await q(
-        `INSERT INTO profiles (user_id, bio, photo, details, notify, updated_at)
-         VALUES ($1, $2, $3, $4, $5, now())
-         ON CONFLICT (user_id) DO UPDATE SET bio = $2, photo = $3, details = $4, notify = profiles.notify || $5, updated_at = now()`,
-        [req.user.id, input.bio, input.photo || null, JSON.stringify(details), JSON.stringify(input.notify)],
+        `UPDATE users SET role = $2, profile_complete = true, bio = $3, photo = $4,
+           city = $5, interests = $6, company_name = $7, designation = $8, industry = $9, company_size = $10,
+           notify_surveys = $11, notify_trips = $12, notify_news = $13
+         WHERE id = $1`,
+        [
+          req.user.id,
+          role,
+          input.bio,
+          input.photo || null,
+          d.city ?? null,
+          d.interests ?? [],
+          d.company ?? null,
+          d.designation ?? null,
+          d.industry ?? null,
+          d.size ?? null,
+          notify.surveys,
+          notify.trips,
+          notify.news,
+        ],
       )
 
-      let role = req.user.role
-      if (!staff) {
-        if (input.role === 'company') role = 'company'
-        else if (req.user.role !== 'volunteer') role = 'visitor'
-      }
-      await q('UPDATE users SET role = $2, profile_complete = true, updated_at = now() WHERE id = $1', [req.user.id, role])
-
+      // a volunteer application: update the pending one, or file a new one
       if (input.role === 'volunteer' && role !== 'volunteer') {
-        const { rows } = await q(`SELECT id FROM volunteer_applications WHERE user_id = $1 AND status = 'pending'`, [req.user.id])
-        if (rows.length) {
-          await q(`UPDATE volunteer_applications SET area = $2, days = $3, boat = $4, emergency_phone = $5 WHERE id = $1`, [
-            rows[0].id,
-            details.area,
-            details.days,
-            details.boat ?? null,
-            emergency,
-          ])
-        } else {
-          await q(`INSERT INTO volunteer_applications (user_id, area, days, boat, emergency_phone) VALUES ($1, $2, $3, $4, $5)`, [
-            req.user.id,
-            details.area,
-            details.days,
-            details.boat ?? null,
-            emergency,
-          ])
-          await audit(q, { userId: req.user.id, action: 'volunteer.applied', meta: { area: details.area }, ip: req.ip })
+        const fields = [d.area, d.days, d.boat ?? null, d.emergency]
+        const updated = await q(
+          `UPDATE volunteer_applications SET area = $2, days = $3, boat = $4, emergency_phone = $5
+           WHERE user_id = $1 AND status = 'pending' RETURNING id`,
+          [req.user.id, ...fields],
+        )
+        if (!updated.rows.length) {
+          await q('INSERT INTO volunteer_applications (user_id, area, days, boat, emergency_phone) VALUES ($1, $2, $3, $4, $5)', [req.user.id, ...fields])
         }
       }
 
-      await audit(q, { userId: req.user.id, action: 'profile.updated', meta: { chose: input.role }, ip: req.ip })
       return loadUser(q, req.user.id)
     })
 
     res.json({ user })
+  }),
+)
+
+// The signed in user's adoptions, newest first (SRS 4.9 track adopted plot).
+router.get(
+  '/adoptions',
+  requireAuth,
+  handle(async (req, res) => {
+    const db = await getDb()
+    const { rows } = await db.query('SELECT * FROM adoptions WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id])
+    res.json({
+      adoptions: rows.map((a) => ({
+        id: a.id,
+        quantity: a.quantity,
+        amount: a.amount_pkr,
+        plot: a.plot_code,
+        status: a.status,
+        createdAt: a.created_at,
+      })),
+    })
   }),
 )
 

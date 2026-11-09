@@ -3,38 +3,87 @@ import bcrypt from 'bcryptjs'
 import { getDb, closeDb } from './index.js'
 import { migrate } from './migrate.js'
 
-// One verified account per dashboard, for demos. Test values only; never run in production.
+/*
+  Demo accounts and their data, so every dashboard has something to show. Test values only;
+  never run in production. All demo accounts sign in with DEMO_PASSWORD and never receive email.
+  Each row is added only if it is not there yet, so running this again changes nothing.
+  `joined` back dates the demo accounts so the sign ups chart has history.
+*/
 export const DEMO_PASSWORD = 'Timar2026'
+
+const PRICE = 300 // rupees per mangrove
 
 const DEMO = [
   {
     name: 'Ayesha Siddiqui',
     email: 'sponsor@timar.com',
+    joined: '2026-04-08',
     phone: '+92 300 1112233',
     role: 'visitor',
-    adopted: 25,
-    details: { city: 'Karachi', interests: ['Adopting mangroves', 'Trips'] },
+    city: 'Karachi',
+    interests: ['Adopting mangroves', 'Trips'],
+    adoptions: [
+      { quantity: 25, plot: 'KD-014', status: 'paid', on: '2026-04-10' },
+      { quantity: 15, plot: 'KD-021', status: 'paid', on: '2026-08-22' },
+      { quantity: 10, plot: null, status: 'pending', on: '2026-11-01' },
+    ],
   },
   {
     name: 'Bilal Hussain',
     email: 'volunteer@timar.com',
+    joined: '2026-06-30',
     phone: '+92 321 4445566',
     role: 'volunteer',
-    details: { area: 'Ibrahim Hyderi', days: ['Sat', 'Sun'], boat: 'Yes' },
+    volunteer: { status: 'approved', area: 'Ibrahim Hyderi', days: ['Sat', 'Sun'], boat: 'Yes', on: '2026-07-02' },
   },
   {
     name: 'Sana Rehman',
     email: 'company@timar.com',
+    joined: '2026-01-12',
     phone: '+92 333 7778899',
     role: 'company',
-    details: { company: 'Indus Textiles Ltd', industry: 'Manufacturing', size: '500+', designation: 'CSR manager' },
+    company: { name: 'Indus Textiles Ltd', designation: 'CSR manager', industry: 'Manufacturing', size: '500+' },
+    adoptions: [
+      { quantity: 4000, plot: 'BU-003', status: 'paid', on: '2026-01-15' },
+      { quantity: 800, plot: 'KD-021', status: 'paid', on: '2026-03-08' },
+      { quantity: 1200, plot: 'KD-014', status: 'paid', on: '2026-04-10' },
+      { quantity: 1000, plot: 'KD-027', status: 'paid', on: '2026-10-05' },
+    ],
   },
   {
     name: 'Rafay Ahmed',
     email: 'admin@timar.com',
+    joined: '2026-01-05',
     phone: '+92 345 0001122',
     role: 'admin',
-    details: { org: 'Saltwater Marina' },
+  },
+  // people waiting for the admin to answer their volunteer request
+  {
+    name: 'Zainab Qureshi',
+    email: 'zainab@timar.com',
+    joined: '2026-10-27',
+    phone: '+92 300 2223344',
+    role: 'visitor',
+    city: 'Karachi',
+    volunteer: { status: 'pending', area: 'Ibrahim Hyderi', days: ['Sat', 'Sun'], boat: 'Yes', on: '2026-10-28' },
+  },
+  {
+    name: 'Hamza Baig',
+    email: 'hamza@timar.com',
+    joined: '2026-10-30',
+    phone: '+92 312 5556677',
+    role: 'visitor',
+    city: 'Karachi',
+    volunteer: { status: 'pending', area: 'Kaderu Island', days: ['Fri', 'Sat'], boat: 'A few times', on: '2026-10-30' },
+  },
+  {
+    name: 'Areeba Noor',
+    email: 'areeba@timar.com',
+    joined: '2026-11-02',
+    phone: '+92 333 8889900',
+    role: 'visitor',
+    city: 'Karachi',
+    volunteer: { status: 'pending', area: 'Buddo Island', days: ['Sun'], boat: 'No', on: '2026-11-02' },
   },
 ]
 
@@ -42,32 +91,31 @@ export async function seedDemoUsers() {
   const db = await getDb()
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10)
   for (const u of DEMO) {
-    // demo logins moved from @timar.test to @timar.com; carry existing rows across instead of duplicating them
-    const old = u.email.replace('@timar.com', '@timar.test')
-    await db.query(
-      `UPDATE users SET email = $1, updated_at = now()
-       WHERE lower(email) = lower($2) AND NOT EXISTS (SELECT 1 FROM users WHERE lower(email) = lower($1))`,
-      [u.email, old],
-    )
-    // if both existed, the old demo address goes so it can no longer sign in
-    await db.query('DELETE FROM users WHERE lower(email) = lower($1)', [old])
     await db.tx(async (q) => {
-      const { rows } = await q(
-        `INSERT INTO users (full_name, email, phone, password_hash, role, email_verified_at, profile_complete)
-         VALUES ($1, $2, $3, $4, $5, now(), true)
-         ON CONFLICT ((lower(email))) DO NOTHING RETURNING id`,
-        [u.name, u.email, u.phone, hash, u.role],
+      await q(
+        `INSERT INTO users (full_name, email, phone, password_hash, role, email_verified, profile_complete,
+           city, interests, company_name, designation, industry, company_size, created_at)
+         VALUES ($1, $2, $3, $4, $5, true, true, $6, $7, $8, $9, $10, $11, $12::date)
+         ON CONFLICT (email) DO UPDATE SET created_at = EXCLUDED.created_at WHERE users.created_at > EXCLUDED.created_at`,
+        [u.name, u.email, u.phone, hash, u.role, u.city ?? null, u.interests ?? [], u.company?.name ?? null, u.company?.designation ?? null, u.company?.industry ?? null, u.company?.size ?? null, u.joined],
       )
-      if (rows[0]) {
-        await q('INSERT INTO profiles (user_id, details) VALUES ($1, $2)', [rows[0].id, JSON.stringify(u.details)])
-      }
-      // the demo adopter has paid for 25 mangroves (Rs. 300 each) planted in KD-014; added once
-      if (u.adopted) {
+      const id = (await q('SELECT id FROM users WHERE email = $1', [u.email])).rows[0].id
+
+      const v = u.volunteer
+      if (v) {
         await q(
-          `INSERT INTO adoptions (user_id, quantity, amount_pkr, plot_code, status)
-           SELECT id, $2, $3, 'KD-014', 'paid' FROM users
-           WHERE lower(email) = lower($1) AND NOT EXISTS (SELECT 1 FROM adoptions a WHERE a.user_id = users.id)`,
-          [u.email, u.adopted, u.adopted * 300],
+          `INSERT INTO volunteer_applications (user_id, status, area, days, boat, created_at)
+           SELECT $1, $2, $3, $4, $5, $6::date WHERE NOT EXISTS (SELECT 1 FROM volunteer_applications WHERE user_id = $1)`,
+          [id, v.status, v.area, v.days, v.boat, v.on],
+        )
+      }
+
+      for (const a of u.adoptions ?? []) {
+        await q(
+          `INSERT INTO adoptions (user_id, quantity, amount_pkr, plot_code, status, created_at)
+           SELECT $1, $2, $3, $4, $5, $6::date
+           WHERE NOT EXISTS (SELECT 1 FROM adoptions WHERE user_id = $1 AND quantity = $2 AND created_at::date = $6::date)`,
+          [id, a.quantity, a.quantity * PRICE, a.plot, a.status, a.on],
         )
       }
     })

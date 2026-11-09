@@ -30,12 +30,11 @@ export const config = {
   exposeDevCodes: !isProd && !env.SMTP_HOST,
 
   // Seeded demo logins (see db/seed.js). No email is ever sent to these addresses.
-  demoEmails: ['sponsor@timar.com', 'volunteer@timar.com', 'company@timar.com', 'admin@timar.com'],
+  demoEmails: ['sponsor@timar.com', 'volunteer@timar.com', 'company@timar.com', 'admin@timar.com', 'zainab@timar.com', 'hamza@timar.com', 'areeba@timar.com'],
 
   session: {
     cookieName: 'timar_session',
-    tokenTtlSec: 60 * 60 * 12, // signed token lifetime, refreshed silently while the session is alive
-    sessionTtlDays: 30, // how long a session can be refreshed before signing in again
+    ttlDays: 7, // how long a sign in lasts before signing in again
   },
 
   otp: {

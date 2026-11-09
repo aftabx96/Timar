@@ -150,3 +150,73 @@ test('uploads accept real images only', async () => {
   assert.equal(fake.status, 400)
   assert.equal((await fetch(`${base}/uploads/nothing-here.png`)).status, 404)
 })
+
+test('admin approves a volunteer request and the overview counts it', async () => {
+  // a new person signs up and asks to volunteer
+  const person = client()
+  const signup = await person('POST', '/api/auth/signup', { name: 'Nida Ali', email: 'nida@timar.com', phone: '0300 1234567', password: 'Fieldtest42' })
+  await person('POST', '/api/auth/verify', { email: 'nida@timar.com', code: signup.body.devCode })
+  await person('PUT', '/api/me/profile', {
+    role: 'volunteer',
+    details: { area: 'Kaderu Island', days: ['Sun'], emergency: '0321 7654321' },
+  })
+
+  assert.equal((await person('GET', '/api/admin/volunteer-applications')).status, 403)
+
+  const admin = await signedIn('admin@timar.com')
+  const before = await admin('GET', '/api/admin/overview')
+  assert.equal(before.body.pendingVolunteers, 4) // three seeded requests plus this one
+  assert.equal(before.body.volunteers, 1)
+
+  const list = await admin('GET', '/api/admin/volunteer-applications')
+  const app = list.body.applications.find((a) => a.email === 'nida@timar.com')
+  assert.equal(app.area, 'Kaderu Island')
+
+  assert.equal((await admin('POST', `/api/admin/volunteer-applications/${app.id}/approve`)).status, 204)
+  assert.equal((await admin('POST', `/api/admin/volunteer-applications/${app.id}/decline`)).status, 404) // already handled
+
+  const me = await person('GET', '/api/auth/me')
+  assert.equal(me.body.user.role, 'volunteer')
+  const after = await admin('GET', '/api/admin/overview')
+  assert.equal(after.body.pendingVolunteers, 3)
+  assert.equal(after.body.volunteers, 2)
+})
+
+test('admin marks an adoption paid, assigns its plot and changes roles', async () => {
+  const admin = await signedIn('admin@timar.com')
+  const sponsor = await signedIn('sponsor@timar.com')
+  assert.equal((await sponsor('GET', '/api/admin/adoptions')).status, 403)
+
+  const list = await admin('GET', '/api/admin/adoptions')
+  const waiting = list.body.adoptions.find((a) => a.status === 'pending' && a.user.email === 'sponsor@timar.com')
+  assert.equal(waiting.quantity, 10)
+
+  const before = (await admin('GET', '/api/admin/overview')).body
+  assert.equal(before.pendingPayments, 1)
+  assert.equal(before.needsPlot, 0)
+
+  // paid: counts towards the adopter and the overview, and now needs a plot
+  assert.equal((await admin('POST', `/api/admin/adoptions/${waiting.id}/paid`)).status, 204)
+  assert.equal((await admin('POST', `/api/admin/adoptions/${waiting.id}/paid`)).status, 404)
+  assert.equal((await sponsor('GET', '/api/auth/me')).body.user.adopted, 50)
+  const after = (await admin('GET', '/api/admin/overview')).body
+  assert.equal(after.pendingPayments, 0)
+  assert.equal(after.needsPlot, 1)
+  assert.equal(after.adopted, before.adopted + 10)
+
+  assert.equal((await admin('PUT', `/api/admin/adoptions/${waiting.id}/plot`, { plot: 'kaderu' })).status, 400)
+  assert.equal((await admin('PUT', `/api/admin/adoptions/${waiting.id}/plot`, { plot: 'kd-030' })).status, 204)
+  const planted = (await sponsor('GET', '/api/me/adoptions')).body.adoptions.find((a) => a.id === waiting.id)
+  assert.equal(planted.plot, 'KD-030')
+
+  // roles
+  const users = (await admin('GET', '/api/admin/users')).body.users
+  const zainab = users.find((u) => u.email === 'zainab@timar.com')
+  const me = users.find((u) => u.email === 'admin@timar.com')
+  assert.equal((await admin('PUT', `/api/admin/users/${zainab.id}/role`, { role: 'coordinator' })).status, 204)
+  assert.equal((await admin('PUT', `/api/admin/users/${zainab.id}/role`, { role: 'boss' })).status, 400)
+  assert.equal((await admin('PUT', `/api/admin/users/${me.id}/role`, { role: 'visitor' })).status, 400)
+  const coordinator = await signedIn('zainab@timar.com')
+  assert.equal((await coordinator('GET', '/api/admin/users')).status, 200) // coordinators can see users
+  assert.equal((await coordinator('PUT', `/api/admin/users/${me.id}/role`, { role: 'visitor' })).status, 403) // but not change roles
+})

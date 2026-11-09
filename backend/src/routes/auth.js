@@ -3,10 +3,9 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { getDb } from '../db/index.js'
 import { config } from '../config.js'
-import { audit } from '../lib/audit.js'
 import { badRequest, conflict, handle, tooMany, unauthorized, ApiError } from '../lib/errors.js'
 import { consumeCode, issueCode } from '../lib/otp.js'
-import { clearSessionCookie, decodeToken, readToken, startSession } from '../lib/session.js'
+import { clearSessionCookie, startSession } from '../lib/session.js'
 import { findByEmail, loadUser } from '../lib/users.js'
 import { loginThrottle, requireAuth } from '../middleware/auth.js'
 
@@ -72,9 +71,8 @@ async function withCode(body, purpose, onValid) {
   return out.value
 }
 
-async function signIn(q, req, res, row, action) {
-  await startSession(q, req, res, row)
-  await audit(q, { userId: row.id, action, ip: req.ip })
+async function signIn(q, res, row) {
+  startSession(res, row)
   return loadUser(q, row.id)
 }
 
@@ -88,7 +86,7 @@ router.post(
 
     const out = await db.tx(async (q) => {
       const existing = await findByEmail(q, body.email)
-      if (existing?.email_verified_at) {
+      if (existing?.email_verified) {
         throw conflict('This email already has an account.', { code: 'email_taken', field: 'email' })
       }
       const hash = await bcrypt.hash(body.password, BCRYPT_ROUNDS)
@@ -96,7 +94,7 @@ router.post(
       if (existing) {
         // Started sign up before but never verified: take the new details and send a new code.
         const { rows } = await q(
-          `UPDATE users SET full_name = $2, phone = $3, password_hash = $4, updated_at = now() WHERE id = $1 RETURNING *`,
+          `UPDATE users SET full_name = $2, phone = $3, password_hash = $4 WHERE id = $1 RETURNING *`,
           [existing.id, body.name, body.phone, hash],
         )
         user = rows[0]
@@ -106,7 +104,6 @@ router.post(
           [body.name, body.email, body.phone, hash],
         )
         user = rows[0]
-        await audit(q, { userId: user.id, action: 'account.created', ip: req.ip })
       }
       return issueCode(q, user, 'verify', { enforceCooldown: false })
     })
@@ -120,9 +117,8 @@ router.post(
   handle(async (req, res) => {
     const body = z.object({ email, code }).parse(req.body)
     const user = await withCode(body, 'verify', async (q, row) => {
-      await q('UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()), updated_at = now() WHERE id = $1', [row.id])
-      await audit(q, { userId: row.id, action: 'account.verified', ip: req.ip })
-      return signIn(q, req, res, row, 'login.success')
+      await q('UPDATE users SET email_verified = true WHERE id = $1', [row.id])
+      return signIn(q, res, row)
     })
     res.json({ user })
   }),
@@ -146,8 +142,8 @@ router.post(
     const body = z.object({ email, code }).parse(req.body)
     const user = await withCode(body, 'login', async (q, row) => {
       // Receiving the code proves the inbox, so an unverified account becomes verified here.
-      if (!row.email_verified_at) await q('UPDATE users SET email_verified_at = now() WHERE id = $1', [row.id])
-      return signIn(q, req, res, row, 'login.success')
+      if (!row.email_verified) await q('UPDATE users SET email_verified = true WHERE id = $1', [row.id])
+      return signIn(q, res, row)
     })
     res.json({ user })
   }),
@@ -168,15 +164,12 @@ router.post(
       const row = await findByEmail(q, body.email)
       // Compare against a dummy hash when the account is missing so timing does not reveal it.
       const ok = await bcrypt.compare(body.password, row?.password_hash ?? (await dummyHash()))
-      if (!row || !ok) {
-        await audit(q, { userId: row?.id ?? null, action: 'login.failed', meta: { email: body.email }, ip: req.ip })
-        return { failed: true }
-      }
-      if (!row.email_verified_at) {
+      if (!row || !ok) return { failed: true }
+      if (!row.email_verified) {
         const sent = await sendCodeQuietly(q, row, 'verify')
         return { unverified: sent }
       }
-      return { user: await signIn(q, req, res, row, 'login.success') }
+      return { user: await signIn(q, res, row) }
     })
 
     if (result.failed) {
@@ -200,7 +193,7 @@ router.post(
     const db = await getDb()
     const out = await db.tx(async (q) => {
       const row = await findByEmail(q, body.email)
-      if (body.purpose === 'verify' && row && !row.email_verified_at) return issueCode(q, row, 'verify')
+      if (body.purpose === 'verify' && row && !row.email_verified) return issueCode(q, row, 'verify')
       return sendCodeQuietly(q, row, body.purpose)
     })
     res.json(out)
@@ -223,11 +216,8 @@ router.post(
     const body = z.object({ email, code, password }).parse(req.body)
     const user = await withCode(body, 'reset', async (q, row) => {
       const hash = await bcrypt.hash(body.password, BCRYPT_ROUNDS)
-      await q('UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()), updated_at = now() WHERE id = $1', [row.id, hash])
-      // A new password signs out every other device.
-      await q('UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [row.id])
-      await audit(q, { userId: row.id, action: 'password.reset', ip: req.ip })
-      return signIn(q, req, res, row, 'login.success')
+      await q('UPDATE users SET password_hash = $2, email_verified = true WHERE id = $1', [row.id, hash])
+      return signIn(q, res, row)
     })
     res.json({ user })
   }),
@@ -242,13 +232,6 @@ router.get(
 router.post(
   '/logout',
   handle(async (req, res) => {
-    const token = readToken(req)
-    const decoded = token && decodeToken(token)
-    if (decoded) {
-      const db = await getDb()
-      await db.query('UPDATE sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [decoded.payload.sid])
-      await audit(db.query, { userId: decoded.payload.sub, action: 'logout', ip: req.ip })
-    }
     clearSessionCookie(res)
     res.status(204).end()
   }),

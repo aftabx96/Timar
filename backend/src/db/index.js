@@ -45,6 +45,8 @@ function pgOptions(url) {
 
 async function connectPg(url) {
   const { default: pg } = await import('pg')
+  // keep DATE columns as 'YYYY-MM-DD' text; as a JS Date they become local midnight and shift a day in UTC
+  pg.types.setTypeParser(1082, (v) => v)
   const pool = new pg.Pool({ ...pgOptions(url), max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000 })
   // Hosted databases close idle connections now and then. Without this handler that error would
   // crash the server; the pool simply opens a new connection on the next query.

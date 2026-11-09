@@ -3,8 +3,6 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { z } from 'zod'
-import { audit } from '../lib/audit.js'
-import { getDb } from '../db/index.js'
 import { badRequest, handle } from '../lib/errors.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 
@@ -44,8 +42,6 @@ router.post(
 
     const name = `${randomUUID()}.${kind.ext}`
     writeFileSync(join(UPLOAD_DIR, name), bytes)
-    const db = await getDb()
-    await audit(db.query, { userId: req.user.id, action: 'upload.created', meta: { name, bytes: bytes.length }, ip: req.ip })
     res.status(201).json({ url: `/uploads/${name}` })
   }),
 )

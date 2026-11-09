@@ -44,7 +44,7 @@ Timar/
 │   └── src/lib/       API client, auth, sites, photo list
 ├── backend/           Express API
 │   ├── src/routes/    auth, profile, content (drives and articles), uploads
-│   ├── src/db/        connection, SQL migrations, seed data
+│   ├── src/db/        connection, schema.sql, seed data
 │   ├── scripts/       db:check and mail:test helpers
 │   └── test/          API tests (node --test)
 └── documentation/     SRS, proposal, ERD, business model canvas, presentation
@@ -117,16 +117,14 @@ cd backend
 npm test
 ```
 
-The tests run the real API against an in-memory database: sign up and code checks, lockouts after wrong codes and passwords, session refresh, password reset, and the drive and article admin routes including uploads.
+The tests run the real API against an in-memory database: sign up and code checks, lockouts after wrong codes and passwords, expired and forged tokens, password reset, and the drive and article admin routes including uploads.
 
 ## Security notes
 
 - Passwords are hashed with bcrypt; email codes are stored as HMACs, expire after 5 minutes and lock after 5 wrong tries.
-- Sessions are signed tokens in httpOnly cookies, tied to a session row that logout and password resets revoke.
+- Sign ins are signed tokens (JWT) in httpOnly cookies that last 7 days.
 - Sign in failures do not reveal whether an email exists, and repeated failures from one address are slowed down.
 - Admin routes check the role on the server, and uploads are checked by their file contents, not just their name.
-- Every account and content change is written to an audit log.
-
 ## Credits
 
 - Field photos: Timar field team, Rehri Goth, 3 October 2026.

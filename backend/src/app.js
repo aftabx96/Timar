@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js'
 import profileRoutes from './routes/profile.js'
 import { adminContent, publicContent } from './routes/content.js'
 import uploadRoutes, { UPLOAD_DIR } from './routes/uploads.js'
+import adminRoutes from './routes/admin.js'
 
 export function createApp() {
   const app = express()
@@ -44,6 +45,7 @@ export function createApp() {
   app.use('/api/me', profileRoutes)
   app.use('/api', publicContent)
   app.use('/api/admin', adminContent)
+  app.use('/api/admin', adminRoutes)
   app.use('/api/uploads', uploadRoutes)
   app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', fallthrough: false }))
 

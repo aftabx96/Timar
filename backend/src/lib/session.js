@@ -1,20 +1,24 @@
 import jwt from 'jsonwebtoken'
 import { config } from '../config.js'
 
-const { cookieName, tokenTtlSec, sessionTtlDays } = config.session
+/*
+  Signing in gives the browser a signed token (JWT) in an httpOnly cookie. The token holds the
+  user id and lasts config.session.ttlDays days. Signing out clears the cookie.
+*/
+
+const { cookieName, ttlDays } = config.session
 
 const cookieOptions = {
   httpOnly: true,
   sameSite: 'lax',
   secure: config.isProd,
   path: '/',
-  maxAge: sessionTtlDays * 24 * 60 * 60 * 1000,
+  maxAge: ttlDays * 24 * 60 * 60 * 1000,
 }
 
-export const signToken = (user, sessionId) =>
-  jwt.sign({ sub: user.id, role: user.role, sid: sessionId }, config.jwtSecret, { expiresIn: tokenTtlSec, algorithm: 'HS256' })
-
-export function setSessionCookie(res, token) {
+/** Signs a token for the user and puts it in the session cookie. */
+export function startSession(res, user) {
+  const token = jwt.sign({ sub: user.id }, config.jwtSecret, { expiresIn: `${ttlDays}d`, algorithm: 'HS256' })
   res.cookie(cookieName, token, cookieOptions)
 }
 
@@ -23,30 +27,14 @@ export function clearSessionCookie(res) {
   res.clearCookie(cookieName, rest)
 }
 
-/** Creates a session row and sets the signed token cookie (SI-2). */
-export async function startSession(q, req, res, user) {
-  const { rows } = await q(
-    `INSERT INTO sessions (user_id, user_agent, ip, expires_at)
-     VALUES ($1, $2, $3, now() + make_interval(days => $4)) RETURNING id`,
-    [user.id, req.get('user-agent')?.slice(0, 300) ?? null, req.ip, sessionTtlDays],
-  )
-  setSessionCookie(res, signToken(user, rows[0].id))
-  return rows[0].id
-}
-
-/** Reads the token from the cookie, or from an Authorization: Bearer header for other API clients. */
-export function readToken(req) {
+/** Returns the user id from a valid token in the cookie (or an Authorization: Bearer header), else null. */
+export function readUserId(req) {
   const header = req.get('authorization')
-  if (header?.startsWith('Bearer ')) return header.slice(7)
-  return req.cookies?.[cookieName] ?? null
-}
-
-/** Verifies the signature. An expired token comes back with expired: true so its session can be refreshed. */
-export function decodeToken(token) {
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : req.cookies?.[cookieName]
+  if (!token) return null
   try {
-    return { payload: jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }), expired: false }
-  } catch (e) {
-    if (e.name !== 'TokenExpiredError') return null
-    return { payload: jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'], ignoreExpiration: true }), expired: true }
+    return jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }).sub
+  } catch {
+    return null
   }
 }

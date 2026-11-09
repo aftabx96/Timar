@@ -94,11 +94,8 @@ test('sign up, wrong code, right code, then /me and profile setup', async () => 
   assert.equal(profile.body.user.profile.emergency, undefined) // kept on the application, not the public profile
 
   const db = await getDb()
-  const { rows } = await db.query(`SELECT action FROM audit_log WHERE user_id = $1 ORDER BY id`, [ok.body.user.id])
-  assert.deepEqual(
-    rows.map((r) => r.action),
-    ['account.created', 'account.verified', 'login.success', 'volunteer.applied', 'profile.updated'],
-  )
+  const { rows } = await db.query(`SELECT status, area, emergency_phone FROM volunteer_applications WHERE user_id = $1`, [ok.body.user.id])
+  assert.deepEqual(rows, [{ status: 'pending', area: 'Ibrahim Hyderi', emergency_phone: '0321 7654321' }])
 })
 
 test('duplicate email is rejected once verified', async () => {
@@ -107,15 +104,18 @@ test('duplicate email is rejected once verified', async () => {
   assert.equal(res.body.error.field, 'email')
 })
 
-test('password sign in: generic failure message, success, logout revokes the session', async () => {
+test('password sign in: generic failure message, success, logout signs out', async () => {
   const api = client()
   const unknown = await api('POST', '/auth/login/password', { email: 'nobody@timar.com', password: 'Whatever1' })
   const wrong = await api('POST', '/auth/login/password', { email: 'company@timar.com', password: 'Whatever1' })
   assert.equal(unknown.status, 401)
   assert.equal(unknown.body.error.message, wrong.body.error.message)
 
-  const adopter = await client()('POST', '/auth/login/password', { email: 'sponsor@timar.com', password: DEMO_PASSWORD })
-  assert.equal(adopter.body.user.adopted, 25)
+  const sponsor = client()
+  const adopter = await sponsor('POST', '/auth/login/password', { email: 'sponsor@timar.com', password: DEMO_PASSWORD })
+  assert.equal(adopter.body.user.adopted, 40) // paid adoptions only; the pending 10 do not count yet
+  const mine = await sponsor('GET', '/me/adoptions')
+  assert.deepEqual(mine.body.adoptions.map((x) => [x.quantity, x.status]), [[10, 'pending'], [15, 'paid'], [25, 'paid']])
 
   const ok = await api('POST', '/auth/login/password', { email: 'company@timar.com', password: DEMO_PASSWORD })
   assert.equal(ok.status, 200)
@@ -155,17 +155,12 @@ test('code locks after five wrong tries', async () => {
   assert.equal(locked.body.error.code, 'code_locked')
 })
 
-test('password reset signs out other sessions', async () => {
-  const phone = client()
-  await phone('POST', '/auth/login/password', { email: 'sponsor@timar.com', password: DEMO_PASSWORD })
-  assert.equal((await phone('GET', '/auth/me')).status, 200)
-
+test('password reset sets the new password and signs in', async () => {
   const laptop = client()
   const sent = await laptop('POST', '/auth/password/forgot', { email: 'sponsor@timar.com' })
   const reset = await laptop('POST', '/auth/password/reset', { email: 'sponsor@timar.com', code: sent.body.devCode, password: 'NewPass2026' })
   assert.equal(reset.status, 200)
 
-  assert.equal((await phone('GET', '/auth/me')).status, 401)
   assert.equal((await laptop('GET', '/auth/me')).status, 200)
   const old = await client()('POST', '/auth/login/password', { email: 'sponsor@timar.com', password: DEMO_PASSWORD })
   assert.equal(old.status, 401)
@@ -190,7 +185,7 @@ test('five failed passwords from one source are delayed', async () => {
   assert.equal(right.status, 429)
 })
 
-test('an expired token is refreshed while its session is alive', async () => {
+test('expired and forged tokens are refused', async () => {
   const { default: jwt } = await import('jsonwebtoken')
   const { config } = await import('../src/config.js')
   const login = await client()('POST', '/auth/login/code', { email: 'company@timar.com' })
@@ -200,14 +195,12 @@ test('an expired token is refreshed while its session is alive', async () => {
     body: JSON.stringify({ email: 'company@timar.com', code: login.body.devCode }),
   })
   const token = res.headers.get('set-cookie').split(';')[0].split('=')[1]
-  const { sub, role, sid } = jwt.decode(token)
-  const expired = jwt.sign({ sub, role, sid, exp: Math.floor(Date.now() / 1000) - 60 }, config.jwtSecret)
+  const { sub } = jwt.decode(token)
+  assert.equal((await fetch(`${base}/auth/me`, { headers: { cookie: `timar_session=${token}` } })).status, 200)
 
-  const me = await fetch(`${base}/auth/me`, { headers: { cookie: `timar_session=${expired}` } })
-  assert.equal(me.status, 200)
-  const fresh = me.headers.get('set-cookie').split(';')[0].split('=')[1]
-  assert.ok(jwt.decode(fresh).exp > Date.now() / 1000)
+  const expired = jwt.sign({ sub, exp: Math.floor(Date.now() / 1000) - 60 }, config.jwtSecret)
+  assert.equal((await fetch(`${base}/auth/me`, { headers: { cookie: `timar_session=${expired}` } })).status, 401)
 
-  const forged = jwt.sign({ sub, role: 'admin', sid }, 'not-the-secret')
+  const forged = jwt.sign({ sub }, 'not-the-secret')
   assert.equal((await fetch(`${base}/auth/me`, { headers: { cookie: `timar_session=${forged}` } })).status, 401)
 })
