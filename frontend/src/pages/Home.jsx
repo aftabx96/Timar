@@ -26,7 +26,6 @@ export default function Home() {
         <Sites />
         <Impact />
         <TakePart />
-        <Species />
         <ClosingCta />
       </main>
       <Footer />
@@ -471,118 +470,6 @@ function TakePart() {
         <div className="mt-14">
           <MudGauge />
         </div>
-      </div>
-    </section>
-  )
-}
-
-/* --------------------------------------------------------------- species */
-
-const SPECIES = [
-  {
-    name: 'Avicennia marina',
-    common: 'Grey mangrove, locally timar',
-    roots: 'Pencil roots that poke up through the mud to breathe',
-    salt: 'Very high',
-    share: 'Most of the delta',
-    leaf: { w: 26, h: 54, tip: 0.2 },
-  },
-  {
-    name: 'Rhizophora mucronata',
-    common: 'Loop root mangrove',
-    roots: 'Stilt roots that arch down from the trunk',
-    salt: 'Moderate',
-    share: 'Reintroduced in patches',
-    leaf: { w: 34, h: 62, tip: 0.55 },
-  },
-  {
-    name: 'Ceriops tagal',
-    common: 'Spurred mangrove',
-    roots: 'Short buttress and knee roots',
-    salt: 'High',
-    share: 'Rare, trial plots',
-    leaf: { w: 30, h: 48, tip: 0.05 },
-  },
-  {
-    name: 'Aegiceras corniculatum',
-    common: 'River mangrove',
-    roots: 'Shallow roots, grows as a shrub',
-    salt: 'Lower, prefers fresher water',
-    share: 'Creek heads only',
-    leaf: { w: 32, h: 44, tip: 0.0 },
-  },
-]
-
-function Leaf({ w, h, tip }) {
-  const cx = 60
-  const top = 60 - h / 2
-  const bot = 60 + h / 2
-  return (
-    <svg viewBox="0 0 120 120" className="h-28 w-28" aria-hidden="true">
-      <motion.path
-        d={`M${cx} ${bot} C ${cx - w} ${bot - h * 0.35}, ${cx - w * 0.8} ${top + h * tip * 0.4}, ${cx} ${top} C ${cx + w * 0.8} ${top + h * tip * 0.4}, ${cx + w} ${bot - h * 0.35}, ${cx} ${bot} Z`}
-        fill="var(--color-leaf-pale)"
-        stroke="var(--color-leaf)"
-        strokeWidth="1.6"
-        initial={{ pathLength: 0 }}
-        whileInView={{ pathLength: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
-      />
-      <path d={`M${cx} ${bot + 10} L${cx} ${top + 6}`} stroke="var(--color-leaf)" strokeWidth="1.4" />
-      {[0.3, 0.5, 0.7].map((t) => (
-        <g key={t} stroke="var(--color-leaf)" strokeWidth="1" opacity=".6">
-          <path d={`M${cx} ${bot - h * t} l ${-w * 0.45} ${-h * 0.12}`} />
-          <path d={`M${cx} ${bot - h * t} l ${w * 0.45} ${-h * 0.12}`} />
-        </g>
-      ))}
-    </svg>
-  )
-}
-
-function Species() {
-  const track = useRef(null)
-  return (
-    <section id="species" className="scroll-mt-16 overflow-hidden border-t border-line bg-paper-2/60 py-24 md:py-32">
-      <div className="container-x grid gap-8 md:grid-cols-[1fr_1fr] md:items-end">
-        <div>
-          <h2 className="font-display text-[clamp(2rem,4.4vw,3.4rem)] leading-[1.04] tracking-[-0.015em]">Why the name.</h2>
-        </div>
-        <p className="max-w-md leading-relaxed text-ink-2">
-          Along the Sindh coast, <span className="font-medium text-ink">timar</span> is the everyday name for the grey mangrove, the hardy tree
-          that holds most of the Indus Delta together. These are the species that go into Timar plots.
-        </p>
-      </div>
-
-      <div ref={track} className="container-x mt-14">
-        <motion.ul
-          drag="x"
-          dragConstraints={track}
-          dragElastic={0.08}
-          className="flex w-max cursor-grab gap-4 active:cursor-grabbing sm:gap-5"
-        >
-          {SPECIES.map((s) => (
-            <li key={s.name} className="w-[78vw] max-w-[320px] shrink-0 select-none rounded-[24px] border border-line bg-paper p-6">
-              <div className="flex items-start justify-between">
-                <Leaf {...s.leaf} />
-                <span className="font-mono text-[0.68rem] text-muted">{s.share}</span>
-              </div>
-              <p className="mt-4 font-display text-2xl leading-tight">{s.name}</p>
-              <p className="mt-1 text-sm text-muted">{s.common}</p>
-              <dl className="mt-6 space-y-3 border-t border-line pt-4 text-sm">
-                <div>
-                  <dt className="eyebrow">Roots</dt>
-                  <dd className="mt-1 text-ink-2">{s.roots}</dd>
-                </div>
-                <div>
-                  <dt className="eyebrow">Salt tolerance</dt>
-                  <dd className="mt-1 text-ink-2">{s.salt}</dd>
-                </div>
-              </dl>
-            </li>
-          ))}
-        </motion.ul>
-        <p className="mt-6 font-mono text-xs text-muted">Drag to see all four</p>
       </div>
     </section>
   )

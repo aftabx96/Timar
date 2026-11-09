@@ -1,60 +1,27 @@
 import { useState } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import DashboardShell, { Panel, Stat, Upcoming } from '../../components/DashboardShell'
-import { Button, Pill } from '../../components/ui'
-import { Columns } from '../../components/charts'
+import { Pill } from '../../components/ui'
+import { LatestDrive, WorthReading } from '../../components/JournalPanels'
+import { AlertsPanel, HoursPanel, NextTask, TaskList } from '../../components/FeaturePanels'
+import { VOLUNTEER_STATS } from '../../lib/previewData'
 import { PHOTOS, src } from '../../lib/fieldPhotos'
+import { SALTWATER_MARINA } from '../../lib/sites'
 import { useAuth } from '../../lib/auth'
+
+/*
+  Volunteer dashboard. The volunteer request (pending or approved) comes from the database, the
+  drive and articles from the Journal. Tasks, hours and satellite alerts read lib/previewData.js
+  until those features are built.
+*/
 
 const NAV = [
   { key: 'overview', label: 'Overview', glyph: 'overview', short: 'Home' },
-  { key: 'tasks', label: 'Field tasks', glyph: 'tasks', short: 'Tasks', count: 3, plan: 'All assigned visits by area, with plot boundaries, stake positions and photo requests from sponsors.' },
+  { key: 'tasks', label: 'Field tasks', glyph: 'tasks', short: 'Tasks', plan: 'All assigned visits by area, with plot boundaries, stake positions and photo requests from adopters.' },
   { key: 'surveys', label: 'My surveys', glyph: 'photos', short: 'Surveys', plan: 'Every survey you submitted, its verification status and the coordinator notes.' },
   { key: 'trips', label: 'Trips', glyph: 'trips', plan: 'Plantation drives you can join as crew.' },
   { key: 'hours', label: 'Hours', glyph: 'hours', plan: 'A full record of your hours and plots, which you can download as a certificate.' },
 ]
-
-const TASKS = [
-  {
-    id: 'FT-1102',
-    plot: 'KD-021',
-    what: 'Month 6 photo survey',
-    when: 'Sat 7 Nov, 07:30',
-    where: 'Kaderu Island, east channel',
-    status: 'assigned',
-    notes: ['Photograph all four stakes, facing the marked direction', 'Note any browsed, cut or washed out patches', 'An adopter asked for a fresh photo of the north corner'],
-  },
-  {
-    id: 'FT-1108',
-    plot: 'KD-027',
-    what: 'Month 1 check on new plot',
-    when: 'Sun 15 Nov, 08:00',
-    where: 'Kaderu Island, inner bend',
-    status: 'assigned',
-    notes: ['Look for propagules washed out by the last spring tide', 'Photo from stake 1'],
-  },
-  {
-    id: 'FT-1093',
-    plot: 'KD-014',
-    what: 'Month 6 photo survey',
-    when: 'Mon 12 Oct',
-    where: 'Kaderu Island, north shore',
-    status: 'verified',
-    notes: ['Coordinator checked and approved your 4 stake photos on 13 Oct.'],
-  },
-  {
-    id: 'FT-1087',
-    plot: 'KR-009',
-    what: 'Photo check after the heat spell',
-    when: 'Mon 28 Sep',
-    where: 'Kairi Creek',
-    status: 'submitted',
-    notes: ['Waiting on coordinator review'],
-  },
-]
-
-const statusTone = { assigned: ['tide', 'Assigned'], submitted: ['muted', 'Waiting review'], verified: ['leaf', 'Verified'] }
-
 
 export default function VolunteerDashboard() {
   const { user } = useAuth()
@@ -71,23 +38,20 @@ export default function VolunteerDashboard() {
         active !== 'overview'
           ? null
           : pending
-            ? 'Your volunteer request is with Saltwater Marina. Once approved, your real tasks replace the examples below.'
-            : 'Two visits coming up. The next one is a photo survey on Kaderu Island this Saturday.'
+            ? 'Your volunteer request is with Saltwater Marina. You will see field tasks here once it is approved.'
+            : 'Two field tasks coming up. The next one is a photo survey of KD-021 on Saturday 7 November.'
       }
     >
-      {active === 'overview' ? <Overview /> : <Upcoming section={section} />}
+      {active === 'overview' ? <Overview user={user} pending={pending} /> : <Upcoming section={section} />}
     </DashboardShell>
   )
 }
 
-function Overview() {
-  const [openTask, setOpenTask] = useState(TASKS[0].id)
-  const [checks, setChecks] = useState([true, false, false, false])
-  const checklist = ['Phone charged, location on', 'Gloves and boots', 'Water, 2 litres', 'Stake map for KD-021']
-
+function Overview({ user, pending }) {
+  const p = user.profile
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-      {/* next task */}
+      {/* the volunteer request, as saved */}
       <section className="relative overflow-hidden rounded-[22px] bg-ink p-6 text-paper sm:p-7 xl:col-span-2">
         <img
           src={src(PHOTOS.wadingBank, 800)}
@@ -97,21 +61,22 @@ function Overview() {
         />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="eyebrow !text-paper/70">Next field task</p>
-            <p className="mt-3 font-display text-[2rem] leading-tight">Survey KD-021</p>
-            <p className="mt-1 text-paper/75">Month 6 photos on the east channel of Kaderu Island</p>
+            <p className="eyebrow !text-paper/70">Volunteer request</p>
+            <p className="mt-3 font-display text-[2rem] leading-tight">{pending ? 'Waiting for approval' : 'Approved'}</p>
+            <p className="mt-1 max-w-md text-paper/75">
+              {pending
+                ? 'A Saltwater Marina coordinator reads every request. This page changes as soon as yours is approved.'
+                : 'Saltwater Marina will contact you before each field visit in your area.'}
+            </p>
           </div>
-          <div className="rounded-2xl bg-paper/10 px-4 py-3 text-right">
-            <p className="font-display text-3xl leading-none">9</p>
-            <p className="mt-1 text-xs text-paper/65">days to go</p>
-          </div>
+          <Pill tone={pending ? 'muted' : 'leaf'}>{pending ? 'Pending' : 'Volunteer'}</Pill>
         </div>
         <dl className="mt-7 grid grid-cols-2 gap-5 border-t border-paper/15 pt-5 text-sm sm:grid-cols-4">
           {[
-            ['Meet', 'Rehri Goth jetty'],
-            ['Time', 'Sat 7 Nov, 07:30'],
-            ['Plot', 'KD-021, east channel'],
-            ['Team', 'You and 3 others'],
+            ['Area', p.area || 'Not given'],
+            ['Days', p.days?.length ? p.days.join(', ') : 'Not given'],
+            ['On a boat before', p.boat || 'Not given'],
+            ['Contact', user.phone],
           ].map(([k, v]) => (
             <div key={k}>
               <dt className="text-paper/70">{k}</dt>
@@ -119,101 +84,59 @@ function Overview() {
             </div>
           ))}
         </dl>
-        <div className="mt-6 grid gap-2 sm:grid-cols-2">
-          {checklist.map((c, i) => (
-            <button
-              key={c}
-              onClick={() => setChecks((s) => s.map((x, j) => (j === i ? !x : x)))}
-              className="flex items-center gap-3 rounded-xl bg-paper/[0.06] px-4 py-3 text-left text-sm transition-colors hover:bg-paper/10"
-            >
-              <span className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${checks[i] ? 'border-leaf-2 bg-leaf-2' : 'border-paper/40'}`}>
-                <svg viewBox="0 0 12 12" className="h-3 w-3">
-                  <motion.path d="M2.5 6.2l2.3 2.3 4.7-5" stroke="var(--color-ink)" strokeWidth="2" fill="none" strokeLinecap="round" initial={false} animate={{ pathLength: checks[i] ? 1 : 0 }} />
-                </svg>
-              </span>
-              <span className={checks[i] ? 'text-paper/60 line-through' : ''}>{c}</span>
-            </button>
-          ))}
-        </div>
+        <p className="mt-6 text-sm text-paper/70">
+          To change your area or days, edit your profile. Questions:{' '}
+          <a href={`mailto:${SALTWATER_MARINA.email}`} className="link-grow pb-0.5 text-paper">
+            {SALTWATER_MARINA.email}
+          </a>
+        </p>
       </section>
 
       <StakeChecklist />
 
-      <div className="grid grid-cols-2 gap-5 sm:grid-cols-4 xl:col-span-3">
-        <Stat label="Hours this season" value="46" note="Since 1 Jul 2026" />
-        <Stat label="Plots worked" value="6" note="Kaderu and Buddo" />
-        <Stat label="Surveys submitted" value="11" note="9 approved so far" />
-        <Stat label="Drives joined" value="4" note="Last one on 3 Oct" />
-      </div>
+      <Stats />
+      <TaskList className="xl:col-span-2" />
+      <NextTask />
+      <HoursPanel />
+      <AlertsPanel forField title="Alerts to check in the field" className="xl:col-span-2" />
 
-      {/* tasks */}
-      <Panel className="xl:col-span-2" title="Your tasks" meta="Tap a task for the brief">
-        <ul className="-mx-2 space-y-1">
-          {TASKS.map((t) => {
-            const open = openTask === t.id
-            const [tone, label] = statusTone[t.status]
-            return (
-              <motion.li layout key={t.id} className={`rounded-2xl transition-colors ${open ? 'bg-paper-2' : 'hover:bg-paper-2/60'}`}>
-                <button onClick={() => setOpenTask(open ? null : t.id)} className="flex w-full items-center gap-4 px-3 py-3.5 text-left" aria-expanded={open}>
-                  <span className="w-16 shrink-0 font-mono text-xs text-muted">{t.plot}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{t.what}</span>
-                    <span className="block truncate text-xs text-muted">
-                      {t.when} / {t.where}
-                    </span>
-                  </span>
-                  <span className="hidden sm:block">
-                    <Pill tone={tone}>{label}</Pill>
-                  </span>
-                  <motion.span animate={{ rotate: open ? 45 : 0 }} className="text-lg leading-none text-ink-2">
-                    +
-                  </motion.span>
-                </button>
-                <AnimatePresence initial={false}>
-                  {open ? (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-3 pb-4 pl-[5.75rem]">
-                        <ul className="space-y-1.5 text-sm text-ink-2">
-                          {t.notes.map((n) => (
-                            <li key={n} className="flex gap-2">
-                              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-ink-3" />
-                              {n}
-                            </li>
-                          ))}
-                        </ul>
-                        {t.status === 'assigned' ? (
-                          <Button size="sm" className="mt-4" arrow>
-                            Start survey
-                          </Button>
-                        ) : null}
-                      </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </motion.li>
-            )
-          })}
-        </ul>
+      <LatestDrive />
+
+      <Panel className="xl:col-span-2" title="What a photo survey involves">
+        <ol className="space-y-3 text-sm text-ink-2">
+          {[
+            'You go out by boat from Rehri Goth with a small team and a coordinator.',
+            'At each plot you photograph it from every marked stake, facing the marked direction.',
+            'You note anything unusual: browsing by camels, cut stems, washed out patches.',
+            'A coordinator checks the photos before they reach the people who adopted the plot.',
+          ].map((t, i) => (
+            <motion.li
+              key={t}
+              initial={{ clipPath: 'inset(0 100% 0 0)' }}
+              animate={{ clipPath: 'inset(0 0% 0 0)' }}
+              transition={{ duration: 0.6, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+              className="flex gap-3"
+            >
+              <span className="font-mono text-xs text-muted">0{i + 1}</span>
+              {t}
+            </motion.li>
+          ))}
+        </ol>
       </Panel>
 
-      <Panel title="Hours by month" meta="2026 season">
-        <Columns
-          unit="hours"
-          data={[
-            { label: 'Jul', value: 6 },
-            { label: 'Aug', value: 4 },
-            { label: 'Sep', value: 12 },
-            { label: 'Oct', value: 16 },
-            { label: 'Nov', value: 8 },
-          ]}
-        />
-      </Panel>
+      <WorthReading className="xl:col-span-3" />
+    </div>
+  )
+}
+
+function Stats() {
+  const v = VOLUNTEER_STATS
+  return (
+    <div className="grid grid-cols-2 gap-5 sm:grid-cols-4 xl:col-span-3">
+      <Stat label="Hours this season" value={v.hours} note="Since 1 Jul 2026" />
+      <Stat label="Plots worked" value={v.plots} note="Kaderu and Buddo" />
+      <Stat label="Surveys submitted" value={v.surveys} note={`${v.approved} approved so far`} />
+      <Stat label="Drives joined" value={v.drives} note="Last one on 3 Oct" />
     </div>
   )
 }

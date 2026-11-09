@@ -186,7 +186,7 @@ export default function ProfileSetup() {
             >
               {step === 0 ? (
                 <>
-                  <Heading title={`Hello ${user?.name?.split(' ')[0] || ''}. How will you use Timar?`} sub="You can change this later from your profile. Coordinator and admin accounts are created by Saltwater Marina." />
+                  <Heading title={`Hello ${user?.name?.split(' ')[0] || ''}. How will you use Timar?`} sub="You can change this later from your profile." />
                   <div className="mt-8 space-y-3" role="radiogroup" aria-label="Account type">
                     {ROLES.map((r) => {
                       const on = data.role === r.key

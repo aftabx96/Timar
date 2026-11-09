@@ -235,7 +235,7 @@ export function TideChart({ hours, lowFrom, lowTo, now }) {
 /* Column chart for counts over time (hours, seedlings, bookings). */
 export function Columns({ data, unit = '', highlightLast = true }) {
   const [hover, setHover] = useState(null)
-  const max = Math.max(...data.map((d) => d.value))
+  const max = Math.max(1, ...data.map((d) => d.value)) // at least 1, so empty months do not divide by zero
   return (
     <div>
       <div className="flex h-40 items-end gap-1.5 sm:gap-2.5">

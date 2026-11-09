@@ -4,12 +4,14 @@ import { useAuth } from './lib/auth'
 import DevInbox from './components/DevInbox'
 import { Spinner } from './components/ui'
 import Home from './pages/Home'
+import About from './pages/About'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ProfileSetup from './pages/ProfileSetup'
 import Dashboard from './pages/Dashboard'
 import { ArticlePage, DrivePage, Journal } from './pages/Journal'
 
+// for opening new page from top
 function ScrollToTop() {
   const { pathname } = useLocation()
   useEffect(() => {
@@ -18,7 +20,7 @@ function ScrollToTop() {
   return null
 }
 
-// Shown for the moment it takes to restore the session from the cookie.
+// loading..
 function Loading() {
   return (
     <div className="flex min-h-dvh items-center justify-center text-ink-3">
@@ -51,6 +53,7 @@ export default function App() {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
         <Route path="/journal" element={<Journal />} />
         <Route path="/journal/drives/:id" element={<DrivePage />} />
         <Route path="/journal/:slug" element={<ArticlePage />} />

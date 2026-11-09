@@ -10,6 +10,7 @@ const NAV = [
   { href: '/#sites', label: 'Sites' },
   { href: '/#take-part', label: 'Take part' },
   { href: '/journal', label: 'Journal' },
+  { href: '/about', label: 'About' },
 ]
 
 export function Navbar() {
@@ -142,7 +143,7 @@ export function Footer() {
         </div>
         {[
           ['Take part', [['Adopt a mangrove', '/signup'], ['Bring a group', '/signup'], ['Volunteer', '/signup'], ['Report cutting', '/signup']]],
-          ['On this site', [['How it works', '/#how'], ['Sites', '/#sites'], ['Journal', '/journal'], ['Species', '/#species']]],
+          ['On this site', [['How it works', '/#how'], ['Sites', '/#sites'], ['Journal', '/journal'], ['About Timar', '/about'], ['Why the name', '/about#species']]],
         ].map(([title, links]) => (
           <div key={title}>
             <p className="eyebrow !text-paper/75">{title}</p>
